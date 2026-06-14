@@ -1,4 +1,4 @@
-# 1CCR Equipe 04: Chatbot
+# 1CCR Equipe 04: Chatbot - Sprint 2
 
 ## Integrantes:
 * Gabriela Angel Silva - RM 570808
@@ -43,3 +43,122 @@ Para garantir a escalabilidade e segurança exigidas pelo ecossistema GoodWe, a 
 
 ### 3. Arquitetura de Validação: Python `unittest`
 * **Justificativa:** A inclusão de testes unitários automatizados desde a Sprint 1 assegura que modificações futuras no prompt ou a troca de modelos não quebrem as regras de ouro do negócio (como o bloqueio imediato por falhas elétricas). Isso eleva a confiabilidade do software antes de sua exposição ao ambiente de produção.
+
+---
+
+## 🗂️ Estrutura do projeto
+
+```
+chatbot-challenge_1CCR-equipe-04/
+│
+├── README.md
+├── main.py                  # Ponto de entrada — instancia engine e inicia CLI
+├── requirements.txt         # Dependências com versões fixadas
+├── .env.example             # Template de variáveis de ambiente
+├── .gitignore               # Ignora .env, __pycache__, .venv
+│
+├── src/
+│   ├── __init__.py
+│   ├── ui.py                # CLI (Rich + prompt-toolkit)
+│   └── engine.py            # Motor do sistema — prompt + IA
+│
+├── prompts/
+│   └── system_prompt.md     # System prompt da IA (persona GoodWe)
+│
+├── tests/
+│   ├── modelo_teste.md     # Descrição do teste de modelo
+│   └── test_model.py     # Sistema para teste do modelo
+│
+│
+└── assets/
+    └── fluxograma.png     # Fluxograma do chatbot
+```
+
+---
+
+## ▶️ Como executar
+
+### Pré-requisitos
+
+- Python 3.10 ou superior
+- Conta gratuita no [Ollama Cloud](https://ollama.com) com API Key gerada
+
+### Passo a passo
+
+```bash
+# 1. Clone o repositório
+git clone https://github.com/gabriela-angel/chatbot-challenge_1CCR-equipe-04.git
+cd chatbot-challenge_1CCR-equipe-04
+
+# 2. Crie e ative o ambiente virtual
+python -m venv .venv
+source .venv/bin/activate        # Linux/macOS
+.venv\Scripts\activate           # Windows
+
+# 3. Instale as dependências
+pip install -r requirements.txt
+
+# 4. Configure as credenciais
+cp .env.example .env
+# Edite o arquivo .env e insira sua chave Ollama:
+# OLLAMA_API_KEY=sua_chave_aqui
+
+# 5. Execute
+python main.py
+```
+
+### Comandos disponíveis na CLI
+
+| Comando | Descrição |
+|---------|-----------|
+| *(qualquer pergunta)* | Gera uma resposta no contexto GoodWe ChargeGrid Intelligence |
+| `teste` | Execução dos testes para validação |
+| `sair` | Encerra o sistema |
+
+---
+
+## Variáveis de Ambiente
+
+| Variável | Padrão | Descrição |
+|---|---|---|
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | URL do servidor Ollama |
+| `OLLAMA_MODEL` | `llama3.2` | Modelo a usar |
+| `USE_REAL_API` | `0` | `1` para testes com o Ollama real |
+
+---
+
+## Casos de Teste
+
+| # | Cenário | Diretriz Validada |
+|---|---|---|
+| CT-01 | Velocidade reduzida com múltiplos veículos | Nunca alucinar; explicar Dynamic Load Balancing |
+| CT-02 | Extração de relatório de consumo/faturamento | Orientar painel; não inventar valores |
+| CT-03 | Estação aparece como "Indisponível" | Suporte operacional claro para operador |
+| CT-04 | Trava física emperrada + luz vermelha | Direcionar IMEDIATAMENTE para manutenção |
+| CT-05 | Cabo danificado com fiação exposta | Ordem IMPERATIVA de não usar o equipamento |
+
+---
+
+## Arquitetura
+
+```
+Usuário
+  │
+  ▼
+[ Mensagem ]
+  │
+  ▼
+[ Histórico de mensagens ]
+  │  ┌──────────────────────────────────┐
+  ├──► System Prompt (contexto GoodWe)  │
+  │  └──────────────────────────────────┘
+  │
+  ▼
+[ Ollama → llama3.2 (temperatura 0.3) ]
+  │
+  ▼
+[ Resposta adicionada ao histórico ]
+  │
+  ▼
+Usuário
+```
