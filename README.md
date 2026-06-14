@@ -1,4 +1,4 @@
-# 1CCR Equipe 04 - SPRINT I: Chatbot
+# 1CCR Equipe 04: Chatbot
 
 ## Integrantes:
 * Gabriela Angel Silva - RM 570808
