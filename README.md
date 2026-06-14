@@ -1,6 +1,6 @@
 # 1CCR Equipe 04: Chatbot - Sprint 2
 
-## Integrantes:
+## 👤 Integrantes:
 * Gabriela Angel Silva - RM 570808
 * Izabelly Menezes - RM 570673
 * Marcos Paulo Sampaio - RM 573987
@@ -8,7 +8,7 @@
 * Tiago Muhlmann - RM 569569
 * Wesley Marques - RM 573915
 
-## O Problema Abordado
+## ⚠️ O Problema Abordado
 
 No cenário atual da mobilidade elétrica urbana, empresas e operadores comerciais enfrentam sérios gargalos na infraestrutura de recarga de veículos elétricos (EVs). O desafio técnico proposto pela **GoodWe** destaca a ausência de mecanismos digitais e inteligentes integrados nos eletropostos para resolver de forma unificada as seguintes dores:
 
@@ -18,7 +18,7 @@ No cenário atual da mobilidade elétrica urbana, empresas e operadores comercia
 
 ---
 
-## Proposta do Chatbot: GoodWe ChargeGrid Intelligence
+## 🤖 Proposta do Chatbot: GoodWe ChargeGrid Intelligence
 
 Nossa solução consiste em um assistente virtual cognitivo integrado à plataforma **GoodWe ChargeGrid Intelligence**, desenvolvido especificamente para atender à persona do **Operador Comercial / Gestor de Eletropostos**. 
 
@@ -31,18 +31,15 @@ O chatbot atua como uma camada de inteligência operacional de primeira linha, p
 
 ---
 
-## Tecnologias Selecionadas e Justificativa Técnica
+## 🖥️ Dependências
 
-Para garantir a escalabilidade e segurança exigidas pelo ecossistema GoodWe, a arquitetura do ecossistema de inteligência artificial da solução foi projetada com a seguinte pilha tecnológica:
-
-### 1. Modelo de Linguagem (LLM): OLLama
-* **Justificativa:** O projeto exige raciocínio lógico avançado para interpretação de regras de segurança elétrica e extração de intenções do usuário em linguagem natural. Esse modelos oferece janelas de contexto robustas e excelente performance em *System Prompting*, garantindo rigidez no cumprimento das diretrizes comportamentais.
-
-### 2. Framework de Orquestração: LangChain
-* **Justificativa:** O LangChain foi selecionado para conectar o modelo de linguagem às APIs de dados dos eletropostos. Ele facilitará a implementação de agentes dinâmicos (*Agents*) e memórias de conversação em tempo real (*ConversationBufferWindowMemory*), preparando a base da aplicação para a integração do padrão RAG (*Retrieval-Augmented Generation*) na Sprint 2.
-
-### 3. Arquitetura de Validação: Python `unittest`
-* **Justificativa:** A inclusão de testes unitários automatizados desde a Sprint 1 assegura que modificações futuras no prompt ou a troca de modelos não quebrem as regras de ouro do negócio (como o bloqueio imediato por falhas elétricas). Isso eleva a confiabilidade do software antes de sua exposição ao ambiente de produção.
+| Pacote | Versão | Uso |
+|---|---|---|
+| `ollama` | 0.6.2 | Cliente para a API Ollama Cloud |
+| `python-dotenv` | 1.2.2 | Carregamento de variáveis de ambiente via `.env` |
+| `rich` | 15.0.0 | Formatação visual do terminal (painéis, cores) |
+| `prompt-toolkit` | 3.0.52 | Input interativo com estilo no terminal |
+| `pyfiglet` | 1.0.4 | Geração do banner ASCII |
 
 ---
 
@@ -117,46 +114,79 @@ python main.py
 
 ---
 
-## Variáveis de Ambiente
+## 🗝️ Variáveis de Ambiente
 
 | Variável | Descrição |
 |---|---|
-| `OLLAMA_API_KEY` | Chave de acesso ao servidor Ollama |
+| `OLLAMA_API_KEY` | Chave de autenticação da API Ollama Cloud |
 
 ---
 
-## Casos de Teste
+## 🎯 Testes
 
-| # | Cenário | Diretriz Validada |
+### Executar via comando embutido
+
+Com o chatbot rodando, digite:
+
+```
+❯ teste
+```
+
+### Executar diretamente via Python
+
+```bash
+python -m tests.test_model
+```
+
+### Casos de Teste (Sprint 1)
+
+| # | Cenário | Objetivo |
 |---|---|---|
-| CT-01 | Velocidade reduzida com múltiplos veículos | Nunca alucinar; explicar Dynamic Load Balancing |
-| CT-02 | Extração de relatório de consumo/faturamento | Orientar painel; não inventar valores |
-| CT-03 | Estação aparece como "Indisponível" | Suporte operacional claro para operador |
-| CT-04 | Trava física emperrada + luz vermelha | Direcionar IMEDIATAMENTE para manutenção |
-| CT-05 | Cabo danificado com fiação exposta | Ordem IMPERATIVA de não usar o equipamento |
+| 1 | Gerenciamento de Potência e Demanda Energética | Verificar compreensão da orquestração dinâmica de potência sem invenção de dados técnicos |
+| 2 | Cobrança e Faturamento (Registro de Ciclos) | Validar aderência ao escopo de faturamento com postura profissional |
+| 3 | Status das Estações e Disponibilidade | Avaliar suporte operacional básico para persona comercial ou usuário |
+| 4 | Tratamento de Falhas e Direcionamento para Manutenção Física | Verificar cumprimento da diretriz de encaminhamento para suporte técnico |
+| 5 | Situação de Risco Elétrico (Segurança Extrema) | Avaliar cumprimento da diretriz crítica de segurança elétrica |
+
+A documentação completa dos casos, com perguntas, respostas esperadas e critérios de avaliação qualitativa, está em [`tests/modelo_teste.md`](tests/modelo_teste.md).
 
 ---
 
-## Arquitetura
+## 📐 Arquitetura
+
+O fluxo de processamento segue a seguinte sequência:
 
 ```
-Usuário
-  │
-  ▼
-[ Mensagem ]
-  │
-  ▼
-[ Histórico de mensagens ]
-  │  ┌──────────────────────────────────┐
-  ├──► System Prompt (contexto GoodWe)  │
-  │  └──────────────────────────────────┘
-  │
-  ▼
-[ Ollama → llama3.2 (temperatura 0.3) ]
-  │
-  ▼
-[ Resposta adicionada ao histórico ]
-  │
-  ▼
-Usuário
+Usuário (CLI) → ui.py → engine.py → Ollama Cloud API (gpt-oss:120b)
+                    ↑                        ↓
+              Histórico de             Resposta gerada
+              mensagens (10 turnos)    com contexto injetado
 ```
+
+O diagrama completo está disponível em [`assets/fluxograma.png`](assets/fluxograma.png).
+
+**Decisões técnicas relevantes:**
+
+- O `system_prompt.md` é carregado dinamicamente a partir do sistema de arquivos, permitindo iterações rápidas sem alterar o código-fonte.
+- O histórico é gerenciado como uma lista de dicionários `role/content`, truncada ao dobro de `MAX_HISTORICO` (20 mensagens), preservando as interações mais recentes.
+- A temperatura do modelo é fixada em `0.3` para respostas mais determinísticas e aderentes ao escopo definido.
+
+---
+
+## 👍 Boas Práticas Adotadas
+
+- **Chave de API via variável de ambiente** — nenhuma credencial exposta no código ou no repositório
+- **`.gitignore` configurado** — arquivos `.env`, `__pycache__` e `.venv` excluídos do versionamento
+- **Separação de responsabilidades** — `engine.py` cuida da lógica de IA; `ui.py` cuida da interface
+- **System prompt em arquivo externo** — facilita iteração sem tocar no código-fonte
+- **Truncagem do histórico** — evita estouro do contexto em conversas longas
+
+---
+
+## 🎬 Vídeo de Demonstração
+
+🔗 https://youtube.com/
+
+---
+
+*FIAP · Ciência da Computação · EV Challenge 2026 · Prompt Engineering and Artificial Intelligence*
