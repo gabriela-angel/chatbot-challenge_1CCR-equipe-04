@@ -119,11 +119,9 @@ python main.py
 
 ## Variáveis de Ambiente
 
-| Variável | Padrão | Descrição |
-|---|---|---|
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | URL do servidor Ollama |
-| `OLLAMA_MODEL` | `llama3.2` | Modelo a usar |
-| `USE_REAL_API` | `0` | `1` para testes com o Ollama real |
+| Variável | Descrição |
+|---|---|
+| `OLLAMA_API_KEY` | Chave de acesso ao servidor Ollama |
 
 ---
 
