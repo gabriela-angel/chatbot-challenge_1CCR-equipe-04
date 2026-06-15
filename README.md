@@ -185,7 +185,7 @@ O diagrama completo está disponível em [`assets/fluxograma.png`](assets/fluxog
 
 ## 🎬 Vídeo de Demonstração
 
-🔗 https://youtu.be/egjpVf5t4Kk?is=EZM8PZ-EmzJXRufw
+🔗 https://www.youtube.com/watch?v=egjpVf5t4Kk
 
 ---
 
