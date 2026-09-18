@@ -1,74 +1,264 @@
 import os
-from ollama import Client
+
 from dotenv import load_dotenv
-from pathlib import Path
+
+from langchain_core.runnables import RunnableLambda
+from langchain_core.runnables.history import (
+    RunnableWithMessageHistory
+)
+from langchain_core.chat_history import (
+    InMemoryChatMessageHistory
+)
+from langchain_ollama import ChatOllama
+
+from src.chain.builder import build_chain
+from src.chain.memoria import SessionMemoryManager
+from src.guardrails.scope_validator import validate_scope
+from src.guardrails.moderation import check_prompt_injection
+
 
 load_dotenv()
-
-client = Client(
-    host="https://ollama.com",
-    headers={
-        "Authorization": "Bearer " + os.environ.get("OLLAMA_API_KEY", "")
-    }
-)
-
-
-def load_system_prompt():
-    path = Path(__file__).parent.parent / "prompts" / "system_prompt.md"
-
-    if path.exists():
-        return path.read_text(encoding="utf-8")
-
-    return ""
 
 
 class MissionEngine:
 
-    MAX_HISTORICO = 10
+    def __init__(
+        self,
+        model: str = "gpt-oss:120b",
+        temperature: float = 0.3,
+        top_p: float = 0.9,
+        max_tokens: int = 800,
+        max_memory_tokens: int = 2500,
+    ):
 
-    def __init__(self):
-        self.system_prompt = load_system_prompt()
-        self.historico = []
+        self.model = model
+        self.temperature = temperature
+        self.top_p = top_p
+        self.max_tokens = max_tokens
+        self.max_memory_tokens = max_memory_tokens
 
-    def is_ready(self) -> bool:
-        return True
+        api_key = os.getenv("OLLAMA_API_KEY")
 
-    def analyze(self, pergunta_usuario: str) -> str:
+        if not api_key:
+            raise RuntimeError(
+                "OLLAMA_API_KEY não encontrada "
+                "no arquivo .env"
+            )
 
-        self.historico.append({
-            "role": "user",
-            "content": pergunta_usuario
-        })
+        # ==========================================
+        # MODELO
+        # ==========================================
 
-        if len(self.historico) > self.MAX_HISTORICO * 2:
-            self.historico = self.historico[-self.MAX_HISTORICO * 2:]
+        self.llm = ChatOllama(
+            model=self.model,
+            temperature=self.temperature,
+            top_p=self.top_p,
+            num_predict=self.max_tokens,
+            base_url="https://ollama.com",
+            client_kwargs={
+                "headers": {
+                    "Authorization": f"Bearer {api_key}"
+                }
+            },
+        )
 
-        mensagens = [
-            {
-                "role": "system",
-                "content": self.system_prompt
-            }
-        ]
+        # ==========================================
+        # MEMÓRIA TOKEN BUFFER
+        # ==========================================
 
-        mensagens.extend(self.historico)
+        self.memory_manager = SessionMemoryManager(
+            llm=self.llm,
+            max_token_limit=self.max_memory_tokens,
+        )
+
+        # ==========================================
+        # CHAIN LCEL
+        # ==========================================
+
+        self.chain = build_chain(
+            llm=self.llm
+        )
+
+        # ==========================================
+        # HISTÓRICO DAS SESSÕES
+        # ==========================================
+
+        self.histories = {}
+
+        # ==========================================
+        # CHAIN PARA O RUNNABLE
+        # ==========================================
+        #
+        # A chain original retorna ConsultaRecarga.
+        #
+        # O RunnableWithMessageHistory precisa receber
+        # uma saída que possa ser armazenada como mensagem.
+        #
+        # Por isso convertemos o resultado Pydantic
+        # para texto antes do gerenciamento da história.
+        #
+
+        self.chain_for_history = (
+            self.chain
+            | RunnableLambda(
+                self._convert_result_to_text
+            )
+        )
+
+        self.chain_with_history = (
+            RunnableWithMessageHistory(
+                self.chain_for_history,
+                self._get_session_history,
+                input_messages_key="input",
+                history_messages_key="history",
+            )
+        )
+
+    # ==============================================
+    # HISTÓRICO DA SESSÃO
+    # ==============================================
+
+    def _get_session_history(
+        self,
+        session_id: str
+    ):
+
+        if session_id not in self.histories:
+
+            self.histories[session_id] = (
+                InMemoryChatMessageHistory()
+            )
+
+        return self.histories[session_id]
+
+    # ==============================================
+    # CONVERSÃO DA SAÍDA ESTRUTURADA
+    # ==============================================
+
+    @staticmethod
+    def _convert_result_to_text(result):
+
+        if hasattr(result, "resposta"):
+
+            return result.resposta
+
+        return str(result)
+
+    # ==============================================
+    # MEMÓRIA TOKEN BUFFER
+    # ==============================================
+
+    def _save_to_memory(
+        self,
+        session_id: str,
+        user_input: str,
+        response: str,
+    ):
+
+        self.memory_manager.add_interaction(
+            session_id=session_id,
+            user_message=user_input,
+            ai_message=response,
+        )
+
+    # ==============================================
+    # ANALYZE
+    # ==============================================
+
+    def analyze(
+        self,
+        user_input: str,
+        session_id: str = "default",
+    ):
+
+        # ==========================================
+        # 1. PROMPT INJECTION
+        # ==========================================
+
+        allowed, moderation_message = (
+            check_prompt_injection(user_input)
+        )
+
+        if not allowed:
+            return moderation_message
+
+        # ==========================================
+        # 2. ESCOPO
+        # ==========================================
+
+        has_history = (
+            self.memory_manager.has_history(
+                session_id
+            )
+        )
+
+        allowed, scope_message = (
+            validate_scope(
+                user_input,
+                has_history=has_history,
+            )
+        )
+
+        if not allowed:
+            return scope_message
+
+        # ==========================================
+        # 3. EXECUÇÃO DA CHAIN
+        # ==========================================
 
         try:
-            resposta = client.chat(
-                model="gpt-oss:120b",
-                messages=mensagens,
-                options={
-                    "num_predict": 800,
-                    "temperature": 0.3
-                },
-                stream=False
-            )["message"]["content"].strip()
 
-            self.historico.append({
-                "role": "assistant",
-                "content": resposta
-            })
+            response = (
+                self.chain_with_history.invoke(
+                    {
+                        "input": user_input
+                    },
+                    config={
+                        "configurable": {
+                            "session_id": session_id
+                        }
+                    },
+                )
+            )
 
-            return resposta
+            # A saída já foi convertida para texto
+            # pelo RunnableLambda.
+            response = str(response)
+
+            # ======================================
+            # 4. TOKEN BUFFER
+            # ======================================
+
+            self._save_to_memory(
+                session_id=session_id,
+                user_input=user_input,
+                response=response,
+            )
+
+            return response
 
         except Exception as e:
-            return f"⚠️ Erro ao consultar IA: {e}"
+
+            return (
+                "Não foi possível processar "
+                "a solicitação no momento.\n\n"
+                f"Detalhes técnicos: {e}"
+            )
+
+    # ==============================================
+    # LIMPAR SESSÃO
+    # ==============================================
+
+    def clear_session(
+        self,
+        session_id: str = "default"
+    ):
+
+        self.histories.pop(
+            session_id,
+            None
+        )
+
+        self.memory_manager.clear(
+            session_id
+        )
