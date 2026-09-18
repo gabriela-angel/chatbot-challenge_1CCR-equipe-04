@@ -3,13 +3,13 @@
 ## 👤 Integrantes:
 
 | Nome | RM |
-|---|---|
-| Gabriela Angel Silva | RM 570808 |
-| Izabelly Menezes | RM 570673 |
-| Marcos Paulo Sampaio | RM 573987 |
-| Otávio Santos | RM 570225 |
-| Tiago Muhlmann | RM 569569 |
-| Wesley Marques | RM 573915 |
+|----------------------|--------|
+| Gabriela Angel Silva | 570808 |
+| Izabelly Menezes | 570673 |
+| Marcos Paulo Sampaio | 573987 |
+| Otávio Santos | 570225 |
+| Tiago Muhlmann | 569569 |
+| Wesley Marques | 573915 |
 
 ## ⚠️ O Problema Abordado
 
