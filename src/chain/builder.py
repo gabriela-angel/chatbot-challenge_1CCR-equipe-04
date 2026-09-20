@@ -18,15 +18,18 @@ load_dotenv()
 
 
 BASE_DIR = Path(__file__).resolve().parents[2]
-PROMPT_FILE = BASE_DIR / "prompts" / "system_prompt.md"
+
+PROMPT_FILE = (
+    BASE_DIR
+    / "prompts"
+    / "system_prompt.md"
+)
 
 
 def carregar_system_prompt() -> str:
-    """
-    Carrega o prompt versionado do diretório prompts/.
-    """
 
     if not PROMPT_FILE.exists():
+
         raise FileNotFoundError(
             f"System prompt não encontrado: {PROMPT_FILE}"
         )
@@ -38,19 +41,20 @@ def carregar_system_prompt() -> str:
 
 def build_llm(
     model: str = "gpt-oss:120b",
-    temperature: float = 0.2,
+    temperature: float = 0.3,
     top_p: float = 0.9,
-    max_tokens: int = 500,
+    max_tokens: int = 800,
 ):
-    """
-    Cria o ChatOllama utilizando Ollama Cloud.
-    """
 
-    api_key = os.getenv("OLLAMA_API_KEY")
+    api_key = os.getenv(
+        "OLLAMA_API_KEY"
+    )
 
     if not api_key:
+
         raise RuntimeError(
-            "OLLAMA_API_KEY não encontrada no arquivo .env"
+            "OLLAMA_API_KEY não encontrada "
+            "no arquivo .env"
         )
 
     return ChatOllama(
@@ -61,19 +65,15 @@ def build_llm(
         base_url="https://ollama.com",
         client_kwargs={
             "headers": {
-                "Authorization": f"Bearer {api_key}"
+                "Authorization": (
+                    f"Bearer {api_key}"
+                )
             }
         },
     )
 
 
 def build_prompt():
-    """
-    Cria o ChatPromptTemplate com:
-    - system prompt versionado;
-    - memória;
-    - instruções de saída estruturada.
-    """
 
     parser = PydanticOutputParser(
         pydantic_object=ConsultaRecarga
@@ -93,7 +93,7 @@ def build_prompt():
         [
             (
                 "system",
-                system_prompt
+                system_prompt,
             ),
 
             MessagesPlaceholder(
@@ -102,7 +102,7 @@ def build_prompt():
 
             (
                 "human",
-                "{input}"
+                "{input}",
             ),
         ]
     )
@@ -119,23 +119,13 @@ def build_prompt():
 def build_chain(
     llm=None,
     model: str = "gpt-oss:120b",
-    temperature: float = 0.2,
+    temperature: float = 0.3,
     top_p: float = 0.9,
-    max_tokens: int = 500,
+    max_tokens: int = 800,
 ):
-    """
-    Chain LCEL:
-
-    ChatPromptTemplate
-        |
-        v
-    ChatOllama
-        |
-        v
-    PydanticOutputParser
-    """
 
     if llm is None:
+
         llm = build_llm(
             model=model,
             temperature=temperature,
@@ -145,16 +135,20 @@ def build_chain(
 
     prompt, parser = build_prompt()
 
-    return prompt | llm | parser
+    return (
+        prompt
+        | llm
+        | parser
+    )
 
 
-# Compatibilidade com o multi_model.py
 def criar_chain(
     model: str = "gpt-oss:120b",
-    temperature: float = 0.2,
+    temperature: float = 0.3,
     top_p: float = 0.9,
-    max_tokens: int = 500,
+    max_tokens: int = 800,
 ):
+
     return build_chain(
         model=model,
         temperature=temperature,

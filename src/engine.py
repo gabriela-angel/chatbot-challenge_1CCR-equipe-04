@@ -6,15 +6,18 @@ from langchain_core.runnables import RunnableLambda
 from langchain_core.runnables.history import (
     RunnableWithMessageHistory
 )
-from langchain_core.chat_history import (
-    InMemoryChatMessageHistory
-)
 from langchain_ollama import ChatOllama
 
 from src.chain.builder import build_chain
-from src.chain.memoria import SessionMemoryManager
+from src.chain.memoria import (
+    SessionMemoryManager,
+    TokenBufferChatMessageHistory,
+)
 from src.guardrails.scope_validator import validate_scope
-from src.guardrails.moderation import check_prompt_injection
+from src.guardrails.moderation import (
+    check_prompt_injection,
+    check_safety_risk,
+)
 
 
 load_dotenv()
@@ -63,7 +66,7 @@ class MissionEngine:
         )
 
         # ==========================================
-        # MEMÓRIA TOKEN BUFFER
+        # MEMÓRIA POR SESSÃO
         # ==========================================
 
         self.memory_manager = SessionMemoryManager(
@@ -80,23 +83,8 @@ class MissionEngine:
         )
 
         # ==========================================
-        # HISTÓRICO DAS SESSÕES
+        # CHAIN PARA HISTÓRICO
         # ==========================================
-
-        self.histories = {}
-
-        # ==========================================
-        # CHAIN PARA O RUNNABLE
-        # ==========================================
-        #
-        # A chain original retorna ConsultaRecarga.
-        #
-        # O RunnableWithMessageHistory precisa receber
-        # uma saída que possa ser armazenada como mensagem.
-        #
-        # Por isso convertemos o resultado Pydantic
-        # para texto antes do gerenciamento da história.
-        #
 
         self.chain_for_history = (
             self.chain
@@ -104,6 +92,10 @@ class MissionEngine:
                 self._convert_result_to_text
             )
         )
+
+        # ==========================================
+        # RUNNABLE COM MEMÓRIA POR SESSÃO
+        # ==========================================
 
         self.chain_with_history = (
             RunnableWithMessageHistory(
@@ -123,43 +115,27 @@ class MissionEngine:
         session_id: str
     ):
 
-        if session_id not in self.histories:
+        memory = self.memory_manager.get_memory(
+            session_id
+        )
 
-            self.histories[session_id] = (
-                InMemoryChatMessageHistory()
-            )
-
-        return self.histories[session_id]
+        return TokenBufferChatMessageHistory(
+            memory
+        )
 
     # ==============================================
     # CONVERSÃO DA SAÍDA ESTRUTURADA
     # ==============================================
 
     @staticmethod
-    def _convert_result_to_text(result):
+    def _convert_result_to_text(
+        result
+    ):
 
         if hasattr(result, "resposta"):
-
             return result.resposta
 
         return str(result)
-
-    # ==============================================
-    # MEMÓRIA TOKEN BUFFER
-    # ==============================================
-
-    def _save_to_memory(
-        self,
-        session_id: str,
-        user_input: str,
-        response: str,
-    ):
-
-        self.memory_manager.add_interaction(
-            session_id=session_id,
-            user_message=user_input,
-            ai_message=response,
-        )
 
     # ==============================================
     # ANALYZE
@@ -183,7 +159,18 @@ class MissionEngine:
             return moderation_message
 
         # ==========================================
-        # 2. ESCOPO
+        # 2. RISCOS DE SEGURANÇA
+        # ==========================================
+
+        safety_allowed, safety_message = (
+            check_safety_risk(user_input)
+        )
+
+        if not safety_allowed:
+            return safety_message
+
+        # ==========================================
+        # 3. ESCOPO
         # ==========================================
 
         has_history = (
@@ -203,7 +190,7 @@ class MissionEngine:
             return scope_message
 
         # ==========================================
-        # 3. EXECUÇÃO DA CHAIN
+        # 4. EXECUÇÃO DA CHAIN LCEL
         # ==========================================
 
         try:
@@ -221,21 +208,7 @@ class MissionEngine:
                 )
             )
 
-            # A saída já foi convertida para texto
-            # pelo RunnableLambda.
-            response = str(response)
-
-            # ======================================
-            # 4. TOKEN BUFFER
-            # ======================================
-
-            self._save_to_memory(
-                session_id=session_id,
-                user_input=user_input,
-                response=response,
-            )
-
-            return response
+            return str(response)
 
         except Exception as e:
 
@@ -246,6 +219,28 @@ class MissionEngine:
             )
 
     # ==============================================
+    # INFORMAÇÕES DA MEMÓRIA
+    # ==============================================
+
+    def get_memory_token_count(
+        self,
+        session_id: str = "default"
+    ) -> int:
+
+        return self.memory_manager.get_token_count(
+            session_id
+        )
+
+    def get_history(
+        self,
+        session_id: str = "default"
+    ):
+
+        return self.memory_manager.get_history(
+            session_id
+        )
+
+    # ==============================================
     # LIMPAR SESSÃO
     # ==============================================
 
@@ -253,11 +248,6 @@ class MissionEngine:
         self,
         session_id: str = "default"
     ):
-
-        self.histories.pop(
-            session_id,
-            None
-        )
 
         self.memory_manager.clear(
             session_id

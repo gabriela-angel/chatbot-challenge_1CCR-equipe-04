@@ -9,7 +9,7 @@ if __name__ == "__main__":
         temperature=0.3,
         top_p=0.9,
         max_tokens=800,
-        max_memory_tokens=2500
+        max_memory_tokens=2500,
     )
 
     run_cli(engine)
