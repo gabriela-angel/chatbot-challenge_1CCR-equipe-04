@@ -1,4 +1,5 @@
 import re
+import unicodedata
 
 
 PADROES_INJECTION = [
@@ -46,20 +47,71 @@ PADROES_RISCO_ELETRICO = [
 
 PADROES_MANUTENCAO_FISICA = [
     r"desmontar",
+    r"desmonte",
     r"abrir\s+o\s+carregador",
+    r"abra\s+o\s+carregador",
     r"abrir\s+o\s+eletroposto",
+    r"abra\s+o\s+eletroposto",
+
     r"trocar\s+fusível",
     r"trocar\s+fusivel",
+    r"substituir\s+fusível",
+    r"substituir\s+fusivel",
+
     r"ligar\s+fio",
     r"desligar\s+fio",
+    r"conectar\s+fio",
+    r"desconectar\s+fio",
+
     r"reparar\s+fiação",
     r"reparar\s+fiacao",
+    r"reparar\s+cabo",
     r"consertar\s+o\s+cabo",
+
+    r"trava\s+.*emperrada",
+    r"trava\s+.*travada",
+    r"destravar\s+.*tomada",
+    r"desbloquear\s+.*tomada",
+    r"destravar\s+.*conector",
+    r"desbloquear\s+.*conector",
+    r"conector\s+.*preso",
+    r"tomada\s+.*presa",
+    r"liberar\s+.*conector",
+    r"liberar\s+.*tomada",
 ]
 
 
 def normalizar(texto: str) -> str:
-    return texto.lower().strip()
+    """
+    Normaliza texto para facilitar a detecção
+    de padrões de segurança.
+
+    Mantém a versão original sem alterar o conteúdo
+    enviado ao modelo.
+    """
+
+    texto = texto or ""
+
+    texto = texto.lower().strip()
+
+    texto = unicodedata.normalize(
+        "NFKD",
+        texto
+    )
+
+    texto = "".join(
+        caractere
+        for caractere in texto
+        if not unicodedata.combining(caractere)
+    )
+
+    texto = re.sub(
+        r"\s+",
+        " ",
+        texto
+    )
+
+    return texto
 
 
 def detectar_prompt_injection(

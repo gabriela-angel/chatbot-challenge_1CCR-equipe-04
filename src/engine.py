@@ -83,13 +83,17 @@ class MissionEngine:
         )
 
         # ==========================================
-        # CHAIN PARA HISTÓRICO
+        # ADAPTADOR PARA HISTÓRICO
+        #
+        # Mantém a saída estruturada disponível
+        # para avaliação, mas fornece uma string
+        # para o histórico conversacional.
         # ==========================================
 
         self.chain_for_history = (
             self.chain
             | RunnableLambda(
-                self._convert_result_to_text
+                self._prepare_history_output
             )
         )
 
@@ -103,6 +107,7 @@ class MissionEngine:
                 self._get_session_history,
                 input_messages_key="input",
                 history_messages_key="history",
+                output_messages_key="output",
             )
         )
 
@@ -124,28 +129,54 @@ class MissionEngine:
         )
 
     # ==============================================
-    # CONVERSÃO DA SAÍDA ESTRUTURADA
+    # PREPARAÇÃO DA SAÍDA
     # ==============================================
 
     @staticmethod
-    def _convert_result_to_text(
-        result
-    ):
+    def _prepare_history_output(result):
+        """
+        Converte o objeto Pydantic em um dicionário.
 
-        if hasattr(result, "resposta"):
-            return result.resposta
+        O campo 'output' é usado pelo
+        RunnableWithMessageHistory para registrar
+        somente a resposta textual na memória.
 
-        return str(result)
+        O campo 'structured' preserva todos os dados
+        validados pelo Pydantic.
+        """
+
+        if hasattr(result, "model_dump"):
+
+            dados = result.model_dump()
+
+            return {
+                "output": result.resposta,
+                "structured": dados,
+            }
+
+        return {
+            "output": str(result),
+            "structured": None,
+        }
 
     # ==============================================
-    # ANALYZE
+    # VALIDAÇÕES DE ENTRADA
     # ==============================================
 
-    def analyze(
+    def _validate_input(
         self,
         user_input: str,
-        session_id: str = "default",
+        session_id: str
     ):
+        """
+        Executa os guardrails antes de chamar o LLM.
+
+        Retorna:
+            (True, None) quando a entrada pode continuar.
+
+        Ou:
+            (False, mensagem) quando deve ser recusada.
+        """
 
         # ==========================================
         # 1. PROMPT INJECTION
@@ -156,7 +187,7 @@ class MissionEngine:
         )
 
         if not allowed:
-            return moderation_message
+            return False, moderation_message
 
         # ==========================================
         # 2. RISCOS DE SEGURANÇA
@@ -167,7 +198,7 @@ class MissionEngine:
         )
 
         if not safety_allowed:
-            return safety_message
+            return False, safety_message
 
         # ==========================================
         # 3. ESCOPO
@@ -187,11 +218,39 @@ class MissionEngine:
         )
 
         if not allowed:
-            return scope_message
+            return False, scope_message
 
-        # ==========================================
-        # 4. EXECUÇÃO DA CHAIN LCEL
-        # ==========================================
+        return True, None
+
+    # ==============================================
+    # EXECUÇÃO PRINCIPAL
+    # ==============================================
+
+    def _invoke(
+        self,
+        user_input: str,
+        session_id: str
+    ):
+        """
+        Executa os guardrails e a chain LCEL.
+
+        Retorna um dicionário com:
+        - output: resposta textual
+        - structured: saída validada pelo Pydantic
+        """
+
+        allowed, message = self._validate_input(
+            user_input,
+            session_id,
+        )
+
+        if not allowed:
+
+            return {
+                "output": message,
+                "structured": None,
+                "blocked": True,
+            }
 
         try:
 
@@ -208,15 +267,89 @@ class MissionEngine:
                 )
             )
 
-            return str(response)
+            return {
+                "output": response.get(
+                    "output",
+                    ""
+                ),
+                "structured": response.get(
+                    "structured"
+                ),
+                "blocked": False,
+            }
 
         except Exception as e:
 
-            return (
-                "Não foi possível processar "
-                "a solicitação no momento.\n\n"
-                f"Detalhes técnicos: {e}"
-            )
+            return {
+                "output": (
+                    "Não foi possível processar "
+                    "a solicitação no momento."
+                ),
+                "structured": None,
+                "blocked": False,
+                "error": str(e),
+            }
+
+    # ==============================================
+    # ANALYZE — API PRINCIPAL DO CHATBOT
+    # ==============================================
+
+    def analyze(
+        self,
+        user_input: str,
+        session_id: str = "default",
+    ):
+
+        result = self._invoke(
+            user_input,
+            session_id,
+        )
+
+        return result["output"]
+
+    # ==============================================
+    # ANALYZE STRUCTURED
+    # ==============================================
+
+    def analyze_structured(
+        self,
+        user_input: str,
+        session_id: str = "default",
+    ):
+        """
+        Retorna a saída estruturada validada pelo Pydantic.
+
+        Retorna None quando a solicitação é bloqueada
+        por algum guardrail ou quando ocorre erro.
+        """
+
+        result = self._invoke(
+            user_input,
+            session_id,
+        )
+
+        return result["structured"]
+
+    # ==============================================
+    # ANALYZE DETAILED
+    # ==============================================
+
+    def analyze_detailed(
+        self,
+        user_input: str,
+        session_id: str = "default",
+    ):
+        """
+        Retorna todas as informações úteis para avaliação.
+
+        Útil para os scripts de eval sem alterar
+        o comportamento normal da interface.
+        """
+
+        return self._invoke(
+            user_input,
+            session_id,
+        )
 
     # ==============================================
     # INFORMAÇÕES DA MEMÓRIA

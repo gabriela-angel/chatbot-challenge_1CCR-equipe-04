@@ -83,5 +83,26 @@
       "GoodWe",
       "ChargeGrid"
     ]
+  },
+  {
+    "id": 8,
+    "categoria": "memory",
+    "cenario": "Memória Conversacional — 3 Turnos",
+    "turnos": [
+      "Estou acompanhando o carregador da estação Central.",
+      "Qual estação estou acompanhando?",
+      "E qual equipamento estou acompanhando?"
+    ],
+    "palavras_chave_por_turno": [
+      [
+        "central"
+      ],
+      [
+        "central"
+      ],
+      [
+        "carregador"
+      ]
+    ]
   }
 ]

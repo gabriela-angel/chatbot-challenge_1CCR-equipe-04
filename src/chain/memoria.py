@@ -1,112 +1,29 @@
 from typing import Dict, List
 
 from langchain.memory import ConversationTokenBufferMemory
-from langchain_core.chat_history import BaseChatMessageHistory
-from langchain_core.messages import BaseMessage
-from langchain_ollama import ChatOllama
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    HumanMessage,
+)
+
+from src.utils.tokens import contar_tokens_mensagens
 
 
-class SessionMemoryManager:
+class TokenBufferChatMessageHistory:
     """
-    Gerencia uma ConversationTokenBufferMemory independente
-    para cada sessão do chatbot.
+    Adaptador entre RunnableWithMessageHistory e
+    ConversationTokenBufferMemory.
 
-    Cada sessão possui seu próprio histórico e o histórico
-    é limitado pelo número máximo de tokens configurado.
-    """
-
-    def __init__(
-        self,
-        llm: ChatOllama,
-        max_token_limit: int = 2500,
-    ):
-        self.llm = llm
-        self.max_token_limit = max_token_limit
-
-        self.memories: Dict[
-            str,
-            ConversationTokenBufferMemory
-        ] = {}
-
-    def get_memory(
-        self,
-        session_id: str
-    ) -> ConversationTokenBufferMemory:
-
-        if session_id not in self.memories:
-
-            self.memories[session_id] = (
-                ConversationTokenBufferMemory(
-                    llm=self.llm,
-                    max_token_limit=self.max_token_limit,
-                    return_messages=True,
-                    memory_key="history",
-                )
-            )
-
-        return self.memories[session_id]
-
-    def get_history(
-        self,
-        session_id: str
-    ) -> List[BaseMessage]:
-
-        return list(
-            self.get_memory(session_id)
-            .chat_memory
-            .messages
-        )
-
-    def has_history(
-        self,
-        session_id: str
-    ) -> bool:
-
-        return len(
-            self.get_history(session_id)
-        ) > 0
-
-    def clear(
-        self,
-        session_id: str
-    ):
-
-        if session_id in self.memories:
-            self.memories[session_id].clear()
-
-    def get_token_count(
-        self,
-        session_id: str
-    ) -> int:
-
-        """
-        Retorna uma estimativa do número de tokens atualmente
-        armazenados na memória da sessão.
-        """
-
-        memory = self.get_memory(session_id)
-
-        try:
-            return memory.llm.get_num_tokens_from_messages(
-                memory.chat_memory.messages
-            )
-        except Exception:
-            return 0
-
-
-class TokenBufferChatMessageHistory(BaseChatMessageHistory):
-    """
-    Adaptador que permite utilizar ConversationTokenBufferMemory
-    diretamente com RunnableWithMessageHistory.
-
-    O RunnableWithMessageHistory trabalha com BaseChatMessageHistory,
-    enquanto o projeto precisa manter ConversationTokenBufferMemory
-    como mecanismo de controle do limite de tokens.
+    O histórico exposto ao RunnableWithMessageHistory
+    é uma lista de mensagens LangChain, enquanto o
+    ConversationTokenBufferMemory continua sendo
+    responsável pelo limite de tokens.
     """
 
     def __init__(
         self,
-        memory: ConversationTokenBufferMemory
+        memory: ConversationTokenBufferMemory,
     ):
         self.memory = memory
 
@@ -116,25 +33,181 @@ class TokenBufferChatMessageHistory(BaseChatMessageHistory):
             self.memory.chat_memory.messages
         )
 
-    def add_messages(
-        self,
-        messages: List[BaseMessage]
-    ) -> None:
-
-        self.memory.chat_memory.add_messages(
-            messages
-        )
-
-        # Aplica o limite definido em max_token_limit.
-        self.memory.prune()
-
     def add_message(
         self,
-        message: BaseMessage
+        message: BaseMessage,
     ) -> None:
 
-        self.add_messages([message])
+        if isinstance(message, HumanMessage):
+
+            self.memory.chat_memory.add_user_message(
+                message.content
+            )
+
+        elif isinstance(message, AIMessage):
+
+            self.memory.chat_memory.add_ai_message(
+                message.content
+            )
+
+        else:
+
+            self.memory.chat_memory.add_message(
+                message
+            )
+
+        self._prune_if_needed()
+
+    def add_messages(
+        self,
+        messages: List[BaseMessage],
+    ) -> None:
+
+        for message in messages:
+            self.add_message(message)
 
     def clear(self) -> None:
 
         self.memory.clear()
+
+    def _prune_if_needed(self) -> None:
+        """
+        Mantém o histórico dentro do limite configurado.
+
+        Algumas versões do LangChain não expõem prune()
+        diretamente em ConversationTokenBufferMemory.
+        Por isso fazemos a poda explicitamente.
+        """
+
+        messages = self.memory.chat_memory.messages
+
+        if not messages:
+            return
+
+        try:
+
+            token_count = contar_tokens_mensagens(
+                messages
+            )
+
+        except Exception:
+
+            return
+
+        while (
+            token_count
+            > self.memory.max_token_limit
+            and len(messages) > 2
+        ):
+
+            # Remove o par mais antigo:
+            # pergunta do usuário + resposta do modelo.
+
+            del messages[0]
+
+            if messages:
+                del messages[0]
+
+            token_count = (
+                contar_tokens_mensagens(
+                    messages
+                )
+            )
+
+
+class SessionMemoryManager:
+    """
+    Gerencia uma memória independente para cada sessão.
+    """
+
+    def __init__(
+        self,
+        llm,
+        max_token_limit: int = 2500,
+    ):
+
+        self.llm = llm
+
+        self.max_token_limit = (
+            max_token_limit
+        )
+
+        self._memories: Dict[
+            str,
+            ConversationTokenBufferMemory
+        ] = {}
+
+    def get_memory(
+        self,
+        session_id: str,
+    ) -> ConversationTokenBufferMemory:
+
+        if session_id not in self._memories:
+
+            self._memories[
+                session_id
+            ] = ConversationTokenBufferMemory(
+                llm=self.llm,
+                max_token_limit=(
+                    self.max_token_limit
+                ),
+                return_messages=True,
+                memory_key="history",
+            )
+
+        return self._memories[
+            session_id
+        ]
+
+    def get_history(
+        self,
+        session_id: str,
+    ) -> TokenBufferChatMessageHistory:
+
+        return TokenBufferChatMessageHistory(
+            self.get_memory(session_id)
+        )
+
+    def has_history(
+        self,
+        session_id: str,
+    ) -> bool:
+
+        memory = self.get_memory(
+            session_id
+        )
+
+        return bool(
+            memory.chat_memory.messages
+        )
+
+    def get_token_count(
+        self,
+        session_id: str,
+    ) -> int:
+
+        memory = self.get_memory(
+            session_id
+        )
+
+        return contar_tokens_mensagens(
+            memory.chat_memory.messages
+        )
+
+    def clear(
+        self,
+        session_id: str,
+    ) -> None:
+
+        if session_id in self._memories:
+
+            self._memories[
+                session_id
+            ].clear()
+
+    def clear_all(self) -> None:
+
+        for memory in self._memories.values():
+            memory.clear()
+
+        self._memories.clear()
