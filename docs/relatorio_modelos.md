@@ -2,7 +2,8 @@
 
 ## Comparação dos modelos
 
-| **Critério** | **gpt-oss:120b** | **qwen3:8b** |
+| Critério | gpt-oss:120b | qwen3:8b |
+|---|---|---|
 | **Qualidade das respostas** | Alta | Boa |
 | **Capacidade de seguir instruções** | Alta | Boa |
 | **Consistência do formato estruturado** | Alta | Boa |
