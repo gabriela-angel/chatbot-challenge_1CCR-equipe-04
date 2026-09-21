@@ -466,13 +466,13 @@ def executar():
     )
 
     if casos_memoria:
+        memoria_respeitou_limite = all(
+            caso["memoria_respeitou_limite"]
+            for caso in casos_memoria
+        )
 
         print(
-            "Memória respeitou limite: "
-            f"{all(
-                caso['memoria_respeitou_limite']
-                for caso in casos_memoria
-            )}"
+            f"Memória respeitou limite: {memoria_respeitou_limite}"
         )
 
     print()
