@@ -1,23 +1,21 @@
 # Relatório de Modelos — Sprint 03
 
-## Modelos avaliados
+## Modelos
 
 | Modelo | Temperature | Top-p | Max tokens |
-|---|---:|---:|---:|
-| gpt-oss:120b | 0 | 0.9 | 2048 |
-| qwen3:8b | 0 | 0.9 | 2048 |
+|---|------------:|------:|-----------:|
+| `gpt-oss:120b` |         0.3 |   0.9 |        800 |
+| `qwen3:8b` |         0.3 |   0.9 |        800 |
 
-## Observações
+## Modelo principal
 
-O modelo principal utilizado na Sprint 03 foi o gpt-oss:120b,
-conforme definido na arquitetura da aplicação.
+O modelo principal da aplicação é `gpt-oss:120b`, conforme a configuração de `src/chain/builder.py` e `src/engine.py`.
 
-O qwen3:8b foi mantido como alternativa para comparação de
-desempenho e custo computacional.
+## Resultado da avaliação Sprint 03
 
-A avaliação da Sprint 03 apresentou 85,7% de acurácia por
-keywords, 100% de acurácia no structured output e latência
-média de 1,497 segundos.
-
-Os parâmetros utilizados devem ser considerados parte da
-configuração experimental da Sprint 03.
+- Casos avaliados: 7
+- Aprovados: 6
+- Acurácia por keyword: 85,7%
+- Structured Output Accuracy: 100%
+- Latência média: 1,497 s
+- Memória respeitou o limite: sim
