@@ -1,4 +1,5 @@
 
+import logging
 import os
 
 from dotenv import load_dotenv
@@ -15,7 +16,7 @@ from src.chain.memoria import (
     SessionMemoryManager,
     TokenBufferChatMessageHistory,
 )
-from src.guardrails.scope_validator import validate_scope
+from src.guardrails.scope_validator import is_greeting, validate_scope
 from src.guardrails.moderation import (
     check_prompt_injection,
     check_safety_risk,
@@ -23,6 +24,14 @@ from src.guardrails.moderation import (
 from src.schemas.consulta_recarga import ConsultaRecarga
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
+
+GREETING_MESSAGE = (
+    "Olá! Sou o assistente da GoodWe ChargeGrid Intelligence. "
+    "Posso responder dúvidas com base na documentação disponível sobre "
+    "recarga de veículos elétricos, potência, consumo e suporte."
+)
 
 
 class MissionEngine:
@@ -38,6 +47,8 @@ class MissionEngine:
         use_rag: bool = True,
         rag_k: int = 4,
         rag_min_score: float = 0.20,
+        rag_prompt_version: str | None = None,
+        collection_name: str = "goodwe_knowledge_base",
     ):
         self.model = model
         self.temperature = temperature
@@ -47,6 +58,8 @@ class MissionEngine:
         self.use_rag = use_rag
         self.rag_k = rag_k
         self.rag_min_score = rag_min_score
+        self.rag_prompt_version = rag_prompt_version
+        self.collection_name = collection_name
 
         self._retriever = None
 
@@ -87,7 +100,10 @@ class MissionEngine:
         if self.use_rag:
             from src.rag.prompt_rag import build_rag_chain
 
-            rag_chain = build_rag_chain(llm=self.llm)
+            rag_chain = build_rag_chain(
+                llm=self.llm,
+                prompt_version=self.rag_prompt_version,
+            )
             self.rag_chain_with_history = (
                 self._add_session_history(rag_chain)
             )
@@ -161,7 +177,9 @@ class MissionEngine:
             from src.rag.retriever import KnowledgeRetriever
             from src.rag.vector_store import open_vector_store
 
-            vector_store = open_vector_store()
+            vector_store = open_vector_store(
+                collection_name=self.collection_name,
+            )
 
             self._retriever = KnowledgeRetriever(
                 vector_store=vector_store,
@@ -172,28 +190,51 @@ class MissionEngine:
         return self._retriever
 
     @staticmethod
+    def _source_label(source) -> str:
+        """Formata uma fonte (dict do retriever ou texto) para citação."""
+
+        if isinstance(source, dict):
+            name = source.get("source", "fonte_desconhecida")
+            page = source.get("page")
+            return f"{name}, página {page}" if page else str(name)
+
+        return str(source)
+
+    @classmethod
     def _append_sources(
+        cls,
         answer: str,
-        sources: list[str],
+        sources: list,
     ) -> str:
         """Garante que as fontes recuperadas sejam exibidas."""
 
+        labels = [cls._source_label(source) for source in sources]
+
         missing_sources = [
-            source for source in sources
-            if source not in answer
+            label for label in labels
+            if label not in answer
         ]
 
         if not missing_sources:
             return answer
 
         source_lines = "\n".join(
-            f"- {source}" for source in missing_sources
+            f"- [Fonte: {label}]" for label in missing_sources
         )
 
         return (
             f"{answer.rstrip()}\n\n"
             f"**Fontes consultadas:**\n{source_lines}"
         )
+
+    @staticmethod
+    def _is_insufficient_answer(answer: str) -> bool:
+        """Detecta a recusa padrão por falta de evidência na base."""
+
+        from src.guardrails.moderation import normalizar
+        from src.rag.prompt_rag import NO_INFO_PHRASE
+
+        return normalizar(answer).startswith(normalizar(NO_INFO_PHRASE))
 
     @staticmethod
     def _blocked_result(
@@ -207,6 +248,8 @@ class MissionEngine:
             "blocked": True,
             "reason": reason,
             "sources": [],
+            "retrieved_sources": [],
+            "contexts": [],
             "retrieval_score": None,
         }
 
@@ -236,7 +279,16 @@ class MissionEngine:
                 reason="guardrail",
             )
 
-        sources: list[str] = []
+        # Saudação simples não precisa de recuperação documental.
+        if self.use_rag and is_greeting(user_input):
+            return {
+                **self._blocked_result(GREETING_MESSAGE, reason="greeting"),
+                "blocked": False,
+            }
+
+        sources: list[dict] = []
+        retrieved_sources: list[dict] = []
+        contexts: list[str] = []
         retrieval_score = None
 
         try:
@@ -261,6 +313,11 @@ class MissionEngine:
                     }
 
                 sources = retrieval.sources
+                retrieved_sources = list(retrieval.sources)
+                contexts = [
+                    document.page_content
+                    for document in retrieval.documents
+                ]
 
                 response = self.rag_chain_with_history.invoke(
                     {
@@ -286,6 +343,7 @@ class MissionEngine:
 
             answer = str(response.get("output", "")).strip()
             structured = response.get("structured")
+            reason = None
 
             if not answer:
                 return {
@@ -296,11 +354,19 @@ class MissionEngine:
                     "blocked": False,
                     "reason": "empty_model_response",
                     "sources": sources,
+                    "retrieved_sources": retrieved_sources,
+                    "contexts": contexts,
                     "retrieval_score": retrieval_score,
                 }
 
             if self.use_rag:
-                answer = self._append_sources(answer, sources)
+                if self._is_insufficient_answer(answer):
+                    # O modelo declarou falta de evidência: não listamos
+                    # fontes como se tivessem sustentado a resposta.
+                    sources = []
+                    reason = "insufficient_evidence"
+                else:
+                    answer = self._append_sources(answer, sources)
 
                 if isinstance(structured, dict):
                     structured = dict(structured)
@@ -310,13 +376,20 @@ class MissionEngine:
                 "output": answer,
                 "structured": structured,
                 "blocked": False,
-                "reason": None,
+                "reason": reason,
                 "sources": sources,
+                "retrieved_sources": retrieved_sources,
+                "contexts": contexts,
                 "retrieval_score": retrieval_score,
             }
 
         except Exception:
-            # Não expõe detalhes internos, credenciais ou exceções ao usuário.
+            # Detalhes ficam no log; o usuário não vê credenciais nem stack.
+            logger.exception(
+                "Falha ao processar a solicitação (session_id=%s).",
+                session_id,
+            )
+
             return {
                 "output": (
                     "Não foi possível processar a solicitação. "
@@ -327,6 +400,8 @@ class MissionEngine:
                 "blocked": False,
                 "reason": "processing_error",
                 "sources": [],
+                "retrieved_sources": retrieved_sources,
+                "contexts": contexts,
                 "retrieval_score": retrieval_score,
             }
 

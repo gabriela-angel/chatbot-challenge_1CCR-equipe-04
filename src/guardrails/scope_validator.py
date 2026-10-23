@@ -44,7 +44,35 @@ DOMAIN_KEYWORDS = {
     "relatorio",
     "estação",
     "estacao",
+
+    # Sprint 04 — termos presentes na base de conhecimento.
+    "modbus",
+    "inversor",
+    "inversores",
+    "armazenamento",
+    "eletromobilidade",
+    "eletrobilidade",
+    "veículo elétrico",
+    "veiculo eletrico",
+    "veículos elétricos",
+    "veiculos eletricos",
+    "tarifa",
+    "tarifas",
+    "tarifação",
+    "tarifacao",
+    "condomínio",
+    "condominio",
+    "regimento",
+    "wallbox",
+    "solargo",
+    "sems",
+    "pv master",
+    "baud",
 }
+
+# Siglas curtas: casadas só como palavra inteira para evitar falsos positivos
+# (ex.: "ems" dentro de outras palavras).
+SHORT_DOMAIN_TERMS = {"ems", "ess", "ev", "evse", "bms", "pcs", "trt", "dr", "ac", "dc"}
 
 
 GREETING_PATTERNS = [
@@ -99,10 +127,12 @@ def is_greeting(text: str) -> bool:
 def has_domain_keyword(text: str) -> bool:
     text = text.lower()
 
-    return any(
-        keyword in text
-        for keyword in DOMAIN_KEYWORDS
-    )
+    if any(keyword in text for keyword in DOMAIN_KEYWORDS):
+        return True
+
+    words = set(re.findall(r"[a-zà-ú0-9]+", text))
+
+    return bool(words & SHORT_DOMAIN_TERMS)
 
 
 def is_follow_up(text: str) -> bool:

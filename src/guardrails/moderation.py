@@ -153,6 +153,30 @@ def check_prompt_injection(
 
     return True, ""
 
+PADROES_INJECTION_DOCUMENTO = [
+    r"(ignore|disregard|forget)\s+(all\s+|any\s+|the\s+)?(previous|prior|above|earlier)\s+(instructions|rules|prompts?)",
+    r"(ignore|desconsidere|esqueca)\s+(todas\s+)?(as\s+)?(instrucoes|regras)\s+(anteriores|acima)",
+    r"you\s+are\s+now\b",
+    r"voce\s+agora\s+e\b",
+    r"(reveal|show|print|display|mostre|revele|exiba)\s+.{0,40}(system\s+prompt|prompt\s+do\s+sistema|instrucoes\s+internas)",
+    r"(new|novas)\s+(instructions|instrucoes)\s*:",
+    r"<\s*/?\s*(system|assistant|instructions?)\s*>",
+    r"\bsystem\s*:\s*(you|voce|ignore)",
+]
+
+
+def detectar_injection_em_documento(texto: str) -> bool:
+    """Detecta tentativa de prompt injection dentro de um trecho recuperado."""
+
+    texto_normalizado = normalizar(texto)
+
+    if detectar_prompt_injection(texto):
+        return True
+
+    return any(
+        re.search(padrao, texto_normalizado)
+        for padrao in PADROES_INJECTION_DOCUMENTO
+    )
 
 def detectar_risco_eletrico(
     texto: str

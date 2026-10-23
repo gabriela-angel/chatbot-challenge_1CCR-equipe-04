@@ -1,9 +1,10 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 
+from src.guardrails.moderation import detectar_injection_em_documento
 from src.rag.vector_store import open_vector_store
 
 
@@ -13,13 +14,20 @@ class RetrievalResult:
     context: str
     sources: List[dict]
     best_relevance_score: float | None
+    scores: List[float] = field(default_factory=list)
+    discarded_injection: int = 0
+
+    @property
+    def best_score(self) -> float | None:
+        """Alias usado pelo engine."""
+        return self.best_relevance_score
 
 
 def format_source(document: Document) -> dict:
     metadata = document.metadata or {}
     page = metadata.get("page")
     try:
-        # PyMuPDFLoader costuma numerar a primeira página como 0.
+        # PyMuPDFLoader numera a primeira página como 0.
         display_page = int(page) + 1 if page is not None else None
     except (TypeError, ValueError):
         display_page = None
@@ -31,7 +39,7 @@ def format_source(document: Document) -> dict:
 
 
 class KnowledgeRetriever:
-    """Recuperação semântica com limiar configurável para contexto insuficiente."""
+    """Recuperação semântica com limiar de relevância e filtro anti-injection."""
 
     def __init__(
         self,
@@ -40,7 +48,11 @@ class KnowledgeRetriever:
         collection_name: str = "goodwe_knowledge_base",
         k: int = 4,
         min_relevance_score: float = 0.20,
+        min_score: float | None = None,
     ):
+        # `min_score` é o nome usado pelo engine; mantido como alias.
+        if min_score is not None:
+            min_relevance_score = min_score
         if k < 1:
             raise ValueError("k deve ser pelo menos 1.")
         if not 0.0 <= min_relevance_score <= 1.0:
@@ -53,9 +65,7 @@ class KnowledgeRetriever:
                 collection_name=collection_name,
             )
         else:
-            self.vector_store = open_vector_store(
-                collection_name=collection_name,
-            )
+            self.vector_store = open_vector_store(collection_name=collection_name)
         self.k = k
         self.min_relevance_score = min_relevance_score
 
@@ -64,35 +74,43 @@ class KnowledgeRetriever:
         if not query:
             return RetrievalResult([], "", [], None)
 
-        # relevance score é normalizado pela integração LangChain/Chroma; valores
-        # podem variar conforme a métrica configurada. O limiar precisa ser calibrado
-        # com perguntas reais e anotadas, não tratado como universal.
         pairs = self.vector_store.similarity_search_with_relevance_scores(
             query, k=self.k
         )
-        accepted = [
-            (doc, float(score)) for doc, score in pairs
-            if score >= self.min_relevance_score
-        ]
-        docs = [doc for doc, _ in accepted]
-        best_score = max((score for _, score in accepted), default=None)
+
+        accepted = []
+        discarded = 0
+        for document, score in pairs:
+            if float(score) < self.min_relevance_score:
+                continue
+            # Documentos são conteúdo não confiável: descarta trechos que
+            # tentam dar ordens ao modelo.
+            if detectar_injection_em_documento(document.page_content):
+                discarded += 1
+                continue
+            accepted.append((document, float(score)))
+
+        docs = [document for document, _ in accepted]
+        scores = [score for _, score in accepted]
+
         context_parts = []
-        seen_sources = set()
-        sources = []
-        for document in docs:
+        source_index: dict[tuple, dict] = {}
+        for document, score in accepted:
             source = format_source(document)
             context_parts.append(
                 f"[Fonte: {source['source']}; página: {source['page'] or 'não identificada'}]\n"
                 f"{document.page_content.strip()}"
             )
             key = (source["source"], source["page"])
-            if key not in seen_sources:
-                seen_sources.add(key)
-                sources.append(source)
+            if key not in source_index:
+                source["score"] = round(score, 4)
+                source_index[key] = source
 
         return RetrievalResult(
             documents=docs,
             context="\n\n---\n\n".join(context_parts),
-            sources=sources,
-            best_relevance_score=best_score,
+            sources=list(source_index.values()),
+            best_relevance_score=max(scores, default=None),
+            scores=scores,
+            discarded_injection=discarded,
         )

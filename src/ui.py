@@ -42,7 +42,7 @@ def show_banner():
             "◆ GoodWe ChargeGrid Intelligence ◆\n"
             "Assistente virtual para suporte a estações de recarga "
             "e gestão energética.\n"
-            "Sprint 03 — LangChain LCEL + Memória + Pydantic.\n"
+            "Sprint 04 — RAG (ChromaDB) + citação de fonte + RAGAS.\n"
             "Comandos: 'teste' para validação; 'sair' para encerrar.\n"
             "Modelo: gpt-oss:120b via Ollama Cloud",
             title="",

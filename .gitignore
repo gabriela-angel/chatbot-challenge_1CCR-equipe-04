@@ -4,3 +4,4 @@ __pycache__/
 .venv/
 venv/
 data/chroma_db/
+chatbot.log

@@ -1,20 +1,21 @@
-# Relatório de Modelos — Sprint 03
+# Relatório de Modelos e Parâmetros — Sprint 04
 
-## Comparação dos modelos
-
-| Critério | gpt-oss:120b | qwen3:8b |
+## Parâmetros
+| Parâmetro | Valor | Justificativa |
 |---|---|---|
-| **Qualidade das respostas** | Alta | Boa |
-| **Capacidade de seguir instruções** | Alta | Boa |
-| **Consistência do formato estruturado** | Alta | Boa |
-| **Latência estimada** | Maior | Menor |
-| **Uso de recursos** | Maior | Menor |
-| **Adequação ao projeto** | Maior capacidade para respostas complexas | Mais leve e rápido para consultas simples |
+| temperature | 0.0 | Respostas determinísticas e fundamentadas |
+| top_p | 0.9 | Mantido da Sprint 3 |
+| max_tokens | 800 | __ajustar se o JSON truncar__ |
+| k (top-k) | 4 | __justificar com a iteração__ |
 
----
+## Comparação (mesmo eval set, mesmo prompt, mesma coleção)
+| Métrica | gpt-oss:120b | __2º modelo__ |
+|---|---:|---:|
+| Faithfulness | __ | __ |
+| Answer relevancy | __ | __ |
+| Fonte esperada recuperada | __ | __ |
+| Recusas indevidas | __ | __ |
+| Latência média (s) | __ | __ |
 
-## Observações:
-
-Para o projeto, o gpt-oss:120b foi utilizado como modelo principal por apresentar maior capacidade esperada para interpretação de contexto, geração de respostas e manutenção de respostas estruturadas. O qwen3:8b foi mantido como alternativa mais leve, com expectativa de menor custo computacional e menor latência.
-
-Os valores acima são uma comparação baseada nas características dos modelos e na configuração utilizada (temperature=0.3, top_p=0.9 e max_tokens=800).
+Comando do 2º modelo: `python evals/run_ragas.py --label it3_modelo2 --model <modelo>`.
+Confirme que o modelo existe na sua conta antes de usá-lo.

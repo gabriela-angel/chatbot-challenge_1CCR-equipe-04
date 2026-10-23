@@ -259,7 +259,8 @@ def executar():
 
     casos = carregar_eval()
 
-    engine = MissionEngine()
+    # Sprint 3 = baseline sem RAG (use_rag=False).
+    engine = MissionEngine(use_rag=False)
 
     resultados = []
 
