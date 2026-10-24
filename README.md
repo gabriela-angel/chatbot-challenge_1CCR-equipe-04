@@ -1,278 +1,231 @@
-# 1CCR Equipe 04: Chatbot - Sprint 3
+# GoodWe ChargeGrid Intelligence — Sprint 04
 
-## 👤 Integrantes:
+**FIAP · Ciência da Computação · 1CCR · 2026.2**  
+**Disciplina:** Prompt and Artificial Intelligence  
+**Challenge:** EV Challenge — GoodWe
+
+## Integrantes
 
 | Nome | RM |
-|----------------------|--------|
-| Gabriela Angel | 570808 |
+|---|---:|
+| Gabriela Angel Silva | 570808 |
 | Izabelly Menezes | 570673 |
-| Marcos Sampaio | 573987 |
+| Marcos Paulo Sampaio | 573987 |
 | Otávio Santos | 570225 |
 | Tiago Muhlmann | 569569 |
 | Wesley Marques | 573915 |
 
----
+## Sobre o projeto
 
-## 🤖 GoodWe ChargeGrid Intelligence
+O GoodWe ChargeGrid Intelligence é um chatbot de suporte a temas de mobilidade elétrica, estações de recarga e gerenciamento energético relacionados à documentação disponível da GoodWe. A Sprint 04 evolui a base conversacional das Sprints 1 e 2 e a refatoração com LangChain da Sprint 3 para um pipeline **RAG (Retrieval-Augmented Generation)**, com recuperação semântica, ChromaDB persistente, citações de fonte, controles de segurança e interface web em Gradio.
 
-Chatbot com IA voltado ao domínio de mobilidade elétrica, estações de recarga e gerenciamento energético da plataforma GoodWe ChargeGrid Intelligence.
+O sistema deve responder perguntas factuais com base no contexto recuperado. Quando não houver evidência suficiente, deve recusar a resposta factual em vez de inventar especificações, tarifas, valores ou procedimentos.
 
-Na **Sprint 3**, o núcleo conversacional foi refatorado para **LangChain LCEL**, incorporando:
+## Funcionalidades da Sprint 04
 
-- `ChatPromptTemplate | ChatOllama | PydanticOutputParser`;
-- memória por sessão com `RunnableWithMessageHistory`;
-- `ConversationTokenBufferMemory` com limite de 2.500 tokens;
-- structured output com Pydantic v2 e `field_validator`;
-- system prompt versionado com XML tagging;
-- medição de tokens com `tiktoken`;
-- guardrails para prompt injection/jailbreak, riscos elétricos, manutenção física e escopo GoodWe;
-- avaliação automatizada em `evals/`.
+- **Ingestão documental:** leitura de PDFs por `PyMuPDFLoader` e de arquivos `.md`/`.txt` por `TextLoader`.
+- **Limpeza e chunking:** limpeza de ruídos comuns em PDFs e divisão por `RecursiveCharacterTextSplitter`.
+- **Embeddings:** `nomic-embed-text` via Ollama Cloud por padrão; Ollama local pode ser configurado.
+- **Banco vetorial:** ChromaDB persistente, com coleção `goodwe_knowledge_base` e IDs determinísticos para evitar duplicação ao reindexar chunks idênticos.
+- **Retrieval:** busca semântica top-k, limiar mínimo de relevância, metadados de origem e página.
+- **Grounding e citação:** respostas orientadas pelo contexto recuperado e citações de documento/página.
+- **Prompts versionados:** `v1`, `v2` e `v3`, selecionáveis pela variável `RAG_PROMPT_VERSION`.
+- **Guardrails:** validação de escopo, bloqueio de tentativas de prompt injection e filtragem de trechos suspeitos nos documentos; recusa de perguntas fora do domínio ou sem contexto suficiente.
+- **Interface web:** aplicação Gradio com conversa, estado da resposta, tabela de fontes citadas e trechos recuperados.
+- **Avaliação:** conjunto de 16 casos em `evals/eval_set_rag.json`; script para RAGAS e fallback manual documentado.
+- **Compatibilidade:** o modo sem RAG da Sprint 3 continua disponível para comparação.
 
----
-
-## 🧩 Arquitetura da Sprint 03
+## Arquitetura
 
 ```text
 Usuário
-   ↓
-Guardrails
-   ├── Prompt Injection / Jailbreak
-   ├── Risco elétrico / manutenção
-   └── Escopo GoodWe
-   ↓
-RunnableWithMessageHistory
-   ↓
-ChatPromptTemplate
-   ↓
-ChatOllama (gpt-oss:120b)
-   ↓
-PydanticOutputParser
-   ↓
-ConsultaRecarga
-   ↓
-Resposta estruturada + histórico da sessão
+  │
+  ▼
+Interface Gradio (app/app.py)
+  │
+  ▼
+MissionEngine (src/engine.py)
+  ├── Guardrails: escopo, segurança e prompt injection
+  ├── Memória conversacional por sessão (Sprint 3)
+  └── Pipeline RAG
+       ├── ChromaDB persistente
+       ├── Retriever: top-k + limiar + filtro anti-injection
+       ├── Contexto com metadados de fonte/página
+       ├── Prompt RAG versionado (v1/v2/v3)
+       └── ChatOllama + saída estruturada Pydantic
+  │
+  ▼
+Resposta + citações visíveis + fontes/trechos recuperados
 ```
 
----
-
-## 📁 Estrutura do projeto
+## Estrutura relevante
 
 ```text
-chatbot-challenge_1CCR-equipe-04/
-│
-├── README.md
-├── main.py
-├── requirements.txt
-├── .env.example
-├── .gitignore
-│
-├── prompts/
-│   ├── system_prompt.md
-│   └── system_prompt_v1.md
-│
-├── src/
-│   ├── chain/
-│   │   ├── builder.py
-│   │   ├── memoria.py
-│   │   └── multi_model.py
-│   ├── guardrails/
-│   │   ├── moderation.py
-│   │   └── scope_validator.py
-│   ├── schemas/
-│   │   └── consulta_recarga.py
-│   ├── utils/
-│   │   └── tokens.py
-│   ├── engine.py
-│   └── ui.py
-│
+.
+├── app/
+│   ├── app.py                 # Interface web Gradio
+│   └── README.md              # Instruções específicas da interface
+├── data/
+│   ├── knowledge_base/        # PDFs e documentos da base
+│   └── chroma_db/             # Banco vetorial persistido (gerado localmente)
+├── docs/
+│   ├── relatorio_evolucao.pdf # Relatório de evolução Sprint 04
+│   ├── relatorio_evolucao.md  # Fonte editável do relatório
+│   ├── relatorio_rag.md       # Registro de avaliação RAG
+│   └── relatorio_modelos.md   # Modelos e parâmetros
 ├── evals/
 │   ├── eval_set.json
+│   ├── eval_set_rag.json      # Conjunto de avaliação da Sprint 04
+│   ├── rubrica_manual.md      # Fallback do RAGAS
 │   ├── run_eval.py
-│   └── sprint3_results.json
-│
+│   └── run_ragas.py
+├── prompts/
+│   ├── system_prompt.md
+│   ├── system_prompt_v1.md
+│   ├── rag_prompt_v1.md
+│   ├── rag_prompt_v2.md
+│   └── rag_prompt_v3.md
+├── src/
+│   ├── chain/                 # Chains e memória da Sprint 3
+│   ├── guardrails/            # Escopo, segurança e prompt injection
+│   ├── rag/                   # Loader, chunking, embeddings, Chroma e retriever
+│   ├── schemas/               # Saída estruturada
+│   └── engine.py              # Orquestração do chatbot
 ├── tests/
-│   ├── conftest.py
 │   ├── test_sprint3.py
-│   ├── test_model.py
-│   └── modelo_teste.md
-│
-├── docs/
-│   ├── relatorio_evolucao.pdf
-│   └── relatorio_modelos.md
-│
-│
-└── assets/
-    └── fluxograma.png
+│   └── test_sprint4.py
+├── .env.example
+├── main.py                    # Interface CLI anterior
+└── requirements.txt
 ```
 
----
+## Requisitos
 
-## ⚙️ Dependências principais
+- Python 3.11 ou versão compatível com as dependências instaladas.
+- Chave de acesso Ollama Cloud para o modelo de chat e embeddings, ou endpoint Ollama local configurado para embeddings.
+- Acesso à internet quando o modelo e os embeddings forem utilizados via nuvem.
 
-| Pacote | Uso |
-|---|---|
-| `langchain` | Orquestração LangChain |
-| `langchain-core` | LCEL, prompts e runnables |
-| `langchain-ollama` | Integração com ChatOllama |
-| `pydantic` | Structured output e validação |
-| `tiktoken` | Medição de tokens |
-| `pytest` | Testes automatizados |
-| `python-dotenv` | Variáveis de ambiente |
+## Instalação e configuração
 
----
-
-## ▶️ Como executar
-
-### 1. Criar ambiente virtual
-
-```bash
-python -m venv .venv
-```
+### 1. Criar e ativar o ambiente virtual
 
 Windows:
 
 ```bash
+python -m venv .venv
 .venv\Scripts\activate
 ```
 
 Linux/macOS:
 
 ```bash
+python -m venv .venv
 source .venv/bin/activate
 ```
 
 ### 2. Instalar dependências
 
 ```bash
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 3. Configurar ambiente
+### 3. Configurar variáveis de ambiente
 
-Copie `.env.example` para `.env` e configure:
+Copie `.env.example` para `.env` e configure a chave:
 
-```text
-OLLAMA_API_KEY=sua_chave
+```env
+OLLAMA_API_KEY=sua_chave_ollama
 ```
 
-A chave não deve ser versionada.
+Variáveis opcionais:
 
-### 4. Executar o chatbot
+| Variável | Padrão | Descrição |
+|---|---|---|
+| `RAG_MODEL` | `gpt-oss:120b` | Modelo de chat |
+| `RAG_PROMPT_VERSION` | `v3` | Versão do prompt RAG (`v1`, `v2` ou `v3`) |
+| `RAG_COLLECTION` | `goodwe_knowledge_base` | Coleção ChromaDB |
+| `RAG_K` | `4` | Número máximo de trechos recuperados |
+| `RAG_MIN_SCORE` | `0.20` | Limiar mínimo de relevância |
+| `RAG_MAX_TOKENS` | `800` | Limite de tokens gerados |
+| `OLLAMA_EMBED_BASE_URL` | `https://ollama.com` | Endpoint de embeddings; use `http://localhost:11434` para Ollama local |
+| `GRADIO_SERVER_PORT` | `7860` | Porta da interface Gradio |
+
+## Indexar a base de conhecimento
+
+A indexação deve ser executada a partir da raiz do projeto:
+
+```bash
+python -m src.rag.indexer
+```
+
+O comando carrega os PDFs e arquivos `.md`/`.txt` de `data/knowledge_base/`, limpa e divide o conteúdo, gera embeddings e persiste os vetores em `data/chroma_db/`.
+
+Parâmetros padrão: `chunk_size=800` caracteres e `chunk_overlap=120`. Para reconstruir a coleção após mudar o chunking:
+
+```bash
+python -m src.rag.indexer --chunk-size 1000 --chunk-overlap 150 --rebuild
+```
+
+Use `--rebuild` conscientemente: ele apaga a coleção selecionada antes de indexar novamente. A pasta `data/chroma_db/` é gerada localmente e não precisa ser versionada.
+
+## Executar a interface web
+
+Depois de configurar `.env` e indexar a base:
+
+```bash
+python app/app.py
+```
+
+Abra `http://127.0.0.1:7860` no navegador. A interface exibe a conversa, o status do processamento, as fontes citadas com página e os trechos recuperados. Para encerrar, interrompa o processo no terminal.
+
+## Executar a versão CLI
+
+A interface de terminal anterior permanece disponível:
 
 ```bash
 python main.py
 ```
 
----
+## Avaliação e testes
 
-## 🧪 Testes
-
-Executar a suíte automatizada:
+### Testes automatizados
 
 ```bash
 pytest -v
 ```
 
-A suíte da Sprint 03 valida:
+Os testes da Sprint 4 cobrem limpeza e chunking, validação de parâmetros, persistência/idempotência do ChromaDB, recuperação com metadados, filtro de prompt injection em documentos, prompts versionados, citação de fonte, recusa por falta de evidência e preservação do modo da Sprint 3. Os testes unitários usam embeddings determinísticos e modelo falso, portanto não substituem a avaliação do modelo real.
 
-- Pydantic e `field_validator`;
-- rejeição de valores inválidos;
-- bloqueio de prompt injection;
-- memória em três turnos.
+### Avaliação RAGAS ou fallback manual
 
----
+O conjunto `evals/eval_set_rag.json` possui 16 cenários: perguntas respondíveis, perguntas sem resposta na base e casos de guardrail. Exemplos de execução:
 
-## 📊 Avaliação da Sprint 03
-
-A avaliação automatizada foi executada com o `evals/eval_set.json`.
-
-Resultado registrado:
-
-| Métrica | Resultado |
-|---|---:|
-| Casos avaliados | 7 |
-| Casos aprovados | 6 |
-| Acurácia por keyword | 85,7% |
-| Structured Output Accuracy | 100% |
-| Latência média | 1,497 s |
-| Casos de memória | 1 |
-| Memória respeitou limite | Sim |
-
-Os resultados detalhados são armazenados em:
-
-```text
-evals/sprint3_results.json
+```bash
+python evals/run_ragas.py --label it1_prompt_v1 --prompt-version v1
+python evals/run_ragas.py --label it2_prompt_v2 --prompt-version v2
+python evals/run_ragas.py --label it3_prompt_v3 --prompt-version v3
+python evals/run_ragas.py --compare it1_prompt_v1 it2_prompt_v2 it3_prompt_v3
 ```
 
----
+Os resultados são gravados em `evals/results/`. Verifique as opções disponíveis com:
 
-## 🛡️ Guardrails
+```bash
+python evals/run_ragas.py --help
+```
 
-O sistema possui validações antes da chamada ao modelo para:
+Se o RAGAS não puder ser executado ou produzir mais de 30% de valores inválidos, use o fallback manual definido em `evals/rubrica_manual.md`, mantendo o mesmo conjunto de avaliação em todas as iterações. Registre os scores, a cobertura da fonte esperada, a presença de citações, recusas indevidas e latência em `docs/relatorio_rag.md`.
 
-- prompt injection e jailbreak;
-- riscos elétricos;
-- manutenção física;
-- assuntos fora do escopo GoodWe.
+## Segurança e limitações
 
-Em situações de risco elétrico ou manutenção física, o sistema orienta a interrupção/evitação da intervenção e o contato com suporte técnico ou profissional habilitado.
-
----
-
-## 🧠 Structured Output
-
-O schema `ConsultaRecarga` utiliza Pydantic v2 e valida:
-
-- resposta;
-- categoria;
-- estado do carregador;
-- potência;
-- consumo;
-- faturamento;
-- necessidade de suporte.
-
-Valores negativos de potência, consumo ou faturamento são rejeitados por `field_validator`.
+- Respostas factuais devem estar apoiadas no contexto recuperado e citar a fonte documental.
+- Perguntas fora do escopo, sem contexto relevante ou com evidência insuficiente devem ser recusadas.
+- O conteúdo dos documentos é tratado como não confiável; instruções encontradas dentro dele não devem alterar as regras do sistema.
+- Não são inventadas especificações de produto, tarifas, valores ou procedimentos ausentes da base.
+- A documentação incluída contém arquivos em português e inglês; a qualidade de recuperação de perguntas em português sobre documentos em inglês deve ser verificada na avaliação.
+- PDFs sem texto extraível não são processados por OCR nesta implementação.
+- A citação de página é exibida como índice do PDF acrescido de 1, conforme o código de recuperação.
 
 ---
 
-## 🔢 Configuração principal do modelo
-
-O núcleo da aplicação utiliza:
-
-| Parâmetro | Valor |
-|---|---:|
-| Modelo | `gpt-oss:120b` |
-| Temperature | `0.3` |
-| Top-p | `0.9` |
-| Max tokens | `800` |
-| Limite de memória | `2500 tokens` |
-
-A comparação de modelos e parâmetros está documentada em `docs/relatorio_modelos.md`.
-
----
-
-## 📄 Documentação da Sprint 3
-
-O relatório de evolução da Sprint 3 está em `docs/relatorio_evolucao.pdf` e apresenta:
-
-1. resumo da evolução;
-2. decisões da refatoração para LCEL;
-3. comparativo antes/depois;
-4. problemas encontrados e soluções;
-5. equipe e divisão de trabalho.
-
----
-
-## 🔐 Boas práticas
-
-- API key somente por variável de ambiente;
-- `.env` ignorado pelo Git;
-- separação entre UI, engine, chain, schemas e guardrails;
-- prompt externo e versionado;
-- memória limitada por tokens;
-- saída estruturada validada;
-- testes automatizados.
-
----
-
-**FIAP · Ciência da Computação · EV Challenge 2026 · Prompt and Artificial Intelligence · Sprint 3**
+**FIAP · EV Challenge — GoodWe · Prompt and Artificial Intelligence · Sprint 04 · 2026.2**
